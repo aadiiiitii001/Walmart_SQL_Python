@@ -1,24 +1,23 @@
+from flask import Flask, render_template
 import pandas as pd
 import os
-from sqlalchemy import create_engine
 
-# Load environment variables (optional if running locally)
-DB_USER = os.getenv("DB_USER", "root")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "password")
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_NAME = os.getenv("DB_NAME", "walmart_sales")
+app = Flask(__name__)  # ✅ Flask app instance
 
-# Load cleaned Walmart data
+# Load dataset
 df = pd.read_csv("walmart_clean_data.csv")
 
-print("✅ Data loaded successfully. Shape:", df.shape)
+@app.route('/')
+def home():
+    total_sales = round(df['Weekly_Sales'].sum(), 2)
+    avg_sales = round(df['Weekly_Sales'].mean(), 2)
+    top_store = df.groupby('Store')['Weekly_Sales'].sum().idxmax()
+    return f"""
+    <h2>🚀 Walmart Data Analysis</h2>
+    <p>Total Sales: ${total_sales:,}</p>
+    <p>Average Weekly Sales: ${avg_sales:,}</p>
+    <p>Top Store: {top_store}</p>
+    """
 
-# Example: connect to MySQL database (optional)
-try:
-    engine = create_engine(f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}")
-    print("✅ Database connection successful")
-except Exception as e:
-    print("❌ Database connection failed:", e)
-
-# Simple output to verify Render logs
-print("🚀 Walmart Data Analysis project deployed successfully!")
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
