@@ -33,19 +33,23 @@ def home():
     if df.empty:
         return "<h2>❌ No data available. Please check your CSV file.</h2>"
 
-    # Auto-detect sales column
+    # Auto-detect or compute Sales column
     sales_col = next((c for c in df.columns if 'sale' in c.lower()), None)
-    
+
     if not sales_col:
-        return f"<h2>⚠️ No 'sales' column found in dataset.</h2><br>Columns: {df.columns.tolist()}"
+        if 'unit_price' in df.columns and 'quantity' in df.columns:
+            df['Sales'] = df['unit_price'] * df['quantity']
+            sales_col = 'Sales'
+        else:
+            return f"<h2>⚠️ No 'sales' column found, and unable to compute one.</h2><br>Columns: {df.columns.tolist()}"
 
     # Compute summary stats
     total_sales = round(df[sales_col].sum(), 2)
     avg_sales = round(df[sales_col].mean(), 2)
-    unique_branches = df[df.columns[0]].nunique() if not df.empty else 0
+    unique_branches = df['Branch'].nunique() if 'Branch' in df.columns else 0
     num_rows = len(df)
 
-    # HTML Summary
+    # --- HTML Dashboard ---
     html = f"""
     <html>
         <head>
@@ -87,4 +91,3 @@ def home():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
-
