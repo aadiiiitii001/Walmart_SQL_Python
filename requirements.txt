@@ -1,7 +1,5 @@
 flask
-gunicorn
 pandas
 pymysql
 sqlalchemy
-psycopg2
-kaggle
+gunicorn
