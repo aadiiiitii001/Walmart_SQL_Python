@@ -2,89 +2,100 @@ from flask import Flask, render_template_string
 import pandas as pd
 import pymysql
 from sqlalchemy import create_engine
+import plotly.express as px
 
 app = Flask(__name__)
 
-# Load dataset
-try:
-    df = pd.read_csv("walmart_clean_data.csv")
-    print(f"✅ Data loaded successfully. Shape: {df.shape}")
-except Exception as e:
-    print(f"❌ Error loading data: {e}")
-    df = pd.DataFrame()
+# --- Load data ---
+df = pd.read_csv("walmart.csv")
+print(f"✅ Data loaded successfully. Shape: {df.shape}")
 
-# Database connection (optional – modify if needed)
+# --- Convert to numeric ---
+df['unit_price'] = pd.to_numeric(df['unit_price'], errors='coerce')
+df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce')
+
+# --- Compute Sales ---
+df['Sales'] = df['unit_price'] * df['quantity']
+print("🧮 Computed sales column successfully!")
+
+# --- Compute Metrics ---
+total_sales = df['Sales'].sum()
+avg_sales = df['Sales'].mean()
+unique_branches = df['Branch'].nunique() if 'Branch' in df.columns else 0
+
+# --- Create Bar Chart (Sales by Branch) ---
 try:
-    engine = create_engine("mysql+pymysql://root:password@localhost/walmart_db")
-    print("✅ Database connection successful")
+    branch_sales = df.groupby('Branch')['Sales'].sum().reset_index()
+    fig = px.bar(
+        branch_sales,
+        x='Branch',
+        y='Sales',
+        title='Total Sales by Branch',
+        text_auto='.2s',
+        color='Sales',
+        color_continuous_scale='Blues'
+    )
+    fig.update_layout(
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        font=dict(color='black')
+    )
+    sales_chart_html = fig.to_html(full_html=False)
+except Exception as e:
+    sales_chart_html = f"<p>⚠️ Chart could not be generated: {e}</p>"
+
+# --- Database connection (optional) ---
+try:
+    engine = create_engine("mysql+pymysql://root:password@localhost:3306/testdb")
+    with engine.connect() as conn:
+        print("✅ Database connection successful")
 except Exception as e:
     print(f"⚠️ Database connection failed: {e}")
 
+# --- HTML Template ---
+html = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Walmart Data Analysis</title>
+  <style>
+    body { font-family: Arial; background: #f4f4f9; text-align: center; padding: 30px; }
+    h1 { color: #2d3436; }
+    .card { background: white; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); padding: 20px; width: 350px; margin: 20px auto; }
+    .metric { font-size: 20px; color: #0984e3; }
+    .chart { width: 80%; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+  </style>
+</head>
+<body>
+  <h1>📊 Walmart Data Analysis</h1>
+  <div class="card">
+    <p><strong>Total Records:</strong> {{ total_records }}</p>
+    <p class="metric"><strong>Total Sales:</strong> ${{ total_sales }}</p>
+    <p class="metric"><strong>Average Sales:</strong> ${{ avg_sales }}</p>
+    <p class="metric"><strong>Unique Branches:</strong> {{ unique_branches }}</p>
+  </div>
+  
+  <div class="chart">
+    <h2>📈 Sales by Branch</h2>
+    {{ sales_chart_html|safe }}
+  </div>
+
+  <p>🚀 Deployment Successful on Render!</p>
+</body>
+</html>
+"""
+
 @app.route("/")
 def home():
-    try:
-        if df.empty:
-            return "<h3>❌ No data available!</h3>"
-
-        # Convert data types safely
-        df['unit_price'] = pd.to_numeric(df['unit_price'], errors='coerce')
-        df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce')
-
-        # Compute sales
-        df['Sales'] = df['unit_price'] * df['quantity']
-        df['Sales'].fillna(0, inplace=True)
-
-        print("🧮 Computed sales column successfully!")
-
-        # Calculate summary metrics
-        total_records = len(df)
-        total_sales = round(df['Sales'].sum(), 2)
-        avg_sales = round(df['Sales'].mean(), 2)
-        unique_branches = df['Branch'].nunique()
-
-        # HTML template for dashboard
-        html = f"""
-        <html>
-        <head>
-            <title>Walmart Data Analysis</title>
-            <style>
-                body {{
-                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                    text-align: center;
-                    background-color: #f4f6f8;
-                    color: #333;
-                    padding: 40px;
-                }}
-                h1 {{ color: #0078d7; }}
-                .card {{
-                    display: inline-block;
-                    background: white;
-                    margin: 20px;
-                    padding: 20px 40px;
-                    border-radius: 12px;
-                    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-                }}
-                .footer {{
-                    margin-top: 30px;
-                    color: #666;
-                }}
-            </style>
-        </head>
-        <body>
-            <h1>📊 Walmart Data Analysis</h1>
-            <div class="card"><h3>Total Records:</h3><p>{total_records}</p></div>
-            <div class="card"><h3>Total Sales:</h3><p>${total_sales:,.2f}</p></div>
-            <div class="card"><h3>Average Sales:</h3><p>${avg_sales:,.2f}</p></div>
-            <div class="card"><h3>Unique Branches:</h3><p>{unique_branches}</p></div>
-            <div class="footer">🚀 Deployment Successful on Render!</div>
-        </body>
-        </html>
-        """
-        return render_template_string(html)
-
-    except Exception as e:
-        print(f"❌ Error in home route: {e}")
-        return f"<h3>Internal Server Error: {e}</h3>"
+    return render_template_string(
+        html,
+        total_records=len(df),
+        total_sales=f"{total_sales:,.2f}",
+        avg_sales=f"{avg_sales:,.2f}",
+        unique_branches=unique_branches,
+        sales_chart_html=sales_chart_html
+    )
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
