@@ -19,6 +19,25 @@ except Exception as e:
     print("❌ Failed to load CSV:", e)
     df = pd.DataFrame()
 
+# --- Clean and prepare data ---
+if not df.empty:
+    # Strip spaces from column names
+    df.columns = df.columns.str.strip().str.lower()
+
+    # Ensure numeric types
+    for col in ['unit_price', 'quantity', 'profit_margin']:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+
+    # Compute sales safely
+    if 'unit_price' in df.columns and 'quantity' in df.columns:
+        df['sales'] = df['unit_price'] * df['quantity']
+        print("🧮 Computed sales column successfully!")
+    else:
+        print("⚠️ Missing 'unit_price' or 'quantity' columns — cannot compute sales.")
+else:
+    print("⚠️ Empty dataframe. Check if CSV exists and has data.")
+
 # --- Connect to Database (optional) ---
 try:
     engine = create_engine(f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}")
@@ -33,23 +52,14 @@ def home():
     if df.empty:
         return "<h2>❌ No data available. Please check your CSV file.</h2>"
 
-    # Auto-detect or compute Sales column
-    sales_col = next((c for c in df.columns if 'sale' in c.lower()), None)
+    if 'sales' not in df.columns:
+        return f"<h2>⚠️ No 'sales' column found in dataset.</h2><br>Columns: {df.columns.tolist()}"
 
-    if not sales_col:
-        if 'unit_price' in df.columns and 'quantity' in df.columns:
-            df['Sales'] = df['unit_price'] * df['quantity']
-            sales_col = 'Sales'
-        else:
-            return f"<h2>⚠️ No 'sales' column found, and unable to compute one.</h2><br>Columns: {df.columns.tolist()}"
-
-    # Compute summary stats
-    total_sales = round(df[sales_col].sum(), 2)
-    avg_sales = round(df[sales_col].mean(), 2)
-    unique_branches = df['Branch'].nunique() if 'Branch' in df.columns else 0
+    total_sales = round(df['sales'].sum(), 2)
+    avg_sales = round(df['sales'].mean(), 2)
+    unique_branches = df['branch'].nunique() if 'branch' in df.columns else "N/A"
     num_rows = len(df)
 
-    # --- HTML Dashboard ---
     html = f"""
     <html>
         <head>
@@ -77,7 +87,6 @@ def home():
             <div class="container">
                 <h1>📊 Walmart Data Analysis</h1>
                 <p><span class="metric">Total Records:</span> {num_rows}</p>
-                <p><span class="metric">Detected Sales Column:</span> {sales_col}</p>
                 <p><span class="metric">Total Sales:</span> ${total_sales:,.2f}</p>
                 <p><span class="metric">Average Sales:</span> ${avg_sales:,.2f}</p>
                 <p><span class="metric">Unique Branches:</span> {unique_branches}</p>
