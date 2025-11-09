@@ -1,5 +1,6 @@
 flask
 pandas
-pymysql
-sqlalchemy
 gunicorn
+sqlalchemy
+pymysql
+plotly
