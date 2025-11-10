@@ -1,39 +1,34 @@
+import os
 from flask import Flask, render_template_string
 import pandas as pd
-import pymysql
-from sqlalchemy import create_engine
 import plotly.express as px
-import os
 
 app = Flask(__name__)
 
 # --- Load data safely ---
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-csv_path = os.path.join(BASE_DIR, "Walmart.csv")  # Capital W
-
 try:
-    df = pd.read_csv(csv_path)
+    df = pd.read_csv("walmart.csv")
     print(f"✅ Data loaded successfully. Shape: {df.shape}")
-except FileNotFoundError:
-    print("⚠️ Walmart.csv not found — check filename or path.")
+except Exception as e:
+    print(f"❌ Error loading data: {e}")
     df = pd.DataFrame()
 
-# --- Convert to numeric ---
+# --- Compute Sales and Metrics ---
 if not df.empty:
-    df['unit_price'] = pd.to_numeric(df.get('unit_price', []), errors='coerce')
-    df['quantity'] = pd.to_numeric(df.get('quantity', []), errors='coerce')
-
-    # --- Compute Sales ---
+    df['unit_price'] = pd.to_numeric(df.get('unit_price', 0), errors='coerce')
+    df['quantity'] = pd.to_numeric(df.get('quantity', 0), errors='coerce')
     df['Sales'] = df['unit_price'] * df['quantity']
     print("🧮 Computed sales column successfully!")
 
-    # --- Compute Metrics ---
     total_sales = df['Sales'].sum()
     avg_sales = df['Sales'].mean()
     unique_branches = df['Branch'].nunique() if 'Branch' in df.columns else 0
+else:
+    total_sales = avg_sales = unique_branches = 0
 
-    # --- Create Bar Chart ---
-    try:
+# --- Create Bar Chart (Sales by Branch) ---
+try:
+    if not df.empty and 'Branch' in df.columns:
         branch_sales = df.groupby('Branch')['Sales'].sum().reset_index()
         fig = px.bar(
             branch_sales,
@@ -50,19 +45,10 @@ if not df.empty:
             font=dict(color='black')
         )
         sales_chart_html = fig.to_html(full_html=False)
-    except Exception as e:
-        sales_chart_html = f"<p>⚠️ Chart could not be generated: {e}</p>"
-else:
-    total_sales = avg_sales = unique_branches = 0
-    sales_chart_html = "<p>⚠️ No data available to plot.</p>"
-
-# --- Database connection (optional) ---
-try:
-    engine = create_engine("mysql+pymysql://root:password@localhost:3306/testdb")
-    with engine.connect() as conn:
-        print("✅ Database connection successful")
+    else:
+        sales_chart_html = "<p>⚠️ Chart data unavailable.</p>"
 except Exception as e:
-    print(f"⚠️ Database connection failed: {e}")
+    sales_chart_html = f"<p>⚠️ Chart generation error: {e}</p>"
 
 # --- HTML Template ---
 html = """
@@ -110,4 +96,5 @@ def home():
     )
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    port = int(os.environ.get("PORT", 10000))  # Render provides PORT
+    app.run(host="0.0.0.0", port=port)
