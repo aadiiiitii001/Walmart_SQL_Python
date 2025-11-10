@@ -3,46 +3,58 @@ import pandas as pd
 import pymysql
 from sqlalchemy import create_engine
 import plotly.express as px
+import os
 
 app = Flask(__name__)
 
-# --- Load data ---
-df = pd.read_csv("walmart.csv")
-print(f"✅ Data loaded successfully. Shape: {df.shape}")
+# --- Load data safely ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+csv_path = os.path.join(BASE_DIR, "Walmart.csv")  # Capital W
+
+try:
+    df = pd.read_csv(csv_path)
+    print(f"✅ Data loaded successfully. Shape: {df.shape}")
+except FileNotFoundError:
+    print("⚠️ Walmart.csv not found — check filename or path.")
+    df = pd.DataFrame()
 
 # --- Convert to numeric ---
-df['unit_price'] = pd.to_numeric(df['unit_price'], errors='coerce')
-df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce')
+if not df.empty:
+    df['unit_price'] = pd.to_numeric(df.get('unit_price', []), errors='coerce')
+    df['quantity'] = pd.to_numeric(df.get('quantity', []), errors='coerce')
 
-# --- Compute Sales ---
-df['Sales'] = df['unit_price'] * df['quantity']
-print("🧮 Computed sales column successfully!")
+    # --- Compute Sales ---
+    df['Sales'] = df['unit_price'] * df['quantity']
+    print("🧮 Computed sales column successfully!")
 
-# --- Compute Metrics ---
-total_sales = df['Sales'].sum()
-avg_sales = df['Sales'].mean()
-unique_branches = df['Branch'].nunique() if 'Branch' in df.columns else 0
+    # --- Compute Metrics ---
+    total_sales = df['Sales'].sum()
+    avg_sales = df['Sales'].mean()
+    unique_branches = df['Branch'].nunique() if 'Branch' in df.columns else 0
 
-# --- Create Bar Chart (Sales by Branch) ---
-try:
-    branch_sales = df.groupby('Branch')['Sales'].sum().reset_index()
-    fig = px.bar(
-        branch_sales,
-        x='Branch',
-        y='Sales',
-        title='Total Sales by Branch',
-        text_auto='.2s',
-        color='Sales',
-        color_continuous_scale='Blues'
-    )
-    fig.update_layout(
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        font=dict(color='black')
-    )
-    sales_chart_html = fig.to_html(full_html=False)
-except Exception as e:
-    sales_chart_html = f"<p>⚠️ Chart could not be generated: {e}</p>"
+    # --- Create Bar Chart ---
+    try:
+        branch_sales = df.groupby('Branch')['Sales'].sum().reset_index()
+        fig = px.bar(
+            branch_sales,
+            x='Branch',
+            y='Sales',
+            title='Total Sales by Branch',
+            text_auto='.2s',
+            color='Sales',
+            color_continuous_scale='Blues'
+        )
+        fig.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font=dict(color='black')
+        )
+        sales_chart_html = fig.to_html(full_html=False)
+    except Exception as e:
+        sales_chart_html = f"<p>⚠️ Chart could not be generated: {e}</p>"
+else:
+    total_sales = avg_sales = unique_branches = 0
+    sales_chart_html = "<p>⚠️ No data available to plot.</p>"
 
 # --- Database connection (optional) ---
 try:
